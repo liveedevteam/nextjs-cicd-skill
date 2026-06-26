@@ -1,0 +1,8 @@
+{
+  "name": "nextjs-cicd",
+  "description": "Production-grade CI/CD pipeline for Next.js + Vercel projects. Sets up GitHub Actions workflows (CI gate, tag-based deploy), Playwright E2E tests, Vitest unit tests, knip dead-code scan, and Zod env var validation.",
+  "author": {
+    "name": "liveedevteam"
+  },
+  "category": "development"
+}
