@@ -1,6 +1,6 @@
 {
   "name": "nextjs-cicd-skill",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Install the nextjs-cicd Claude Code skill via npx",
   "bin": {
     "nextjs-cicd-skill": "src/cli.js"
