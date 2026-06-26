@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>nextjs-cicd — Claude Code Skill</title>
+  <meta name="description" content="A Claude Code skill that sets up and audits a production-grade CI/CD pipeline for Next.js + Vercel projects using GitHub Actions." />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -16,6 +17,44 @@
 
     a { color: #7dd3fc; text-decoration: none; }
     a:hover { text-decoration: underline; }
+
+    code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.85em;
+      color: #e8e8e8;
+    }
+
+    /* Nav */
+    nav {
+      border-bottom: 1px solid #1a1a1a;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 0.82rem;
+      color: #666;
+    }
+
+    .nav-links a:hover { color: #e8e8e8; text-decoration: none; }
 
     /* Hero */
     .hero {
@@ -61,6 +100,7 @@
       gap: 12px;
       justify-content: center;
       flex-wrap: wrap;
+      margin-bottom: 48px;
     }
 
     .btn {
@@ -70,16 +110,17 @@
       font-weight: 600;
       cursor: pointer;
       transition: opacity 0.15s;
+      display: inline-block;
     }
     .btn:hover { opacity: 0.85; text-decoration: none; }
     .btn-primary { background: #0ea5e9; color: #fff; }
     .btn-secondary { background: #1e1e1e; color: #e8e8e8; border: 1px solid #333; }
 
-    /* Install block */
+    /* Install tabs */
     .install {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 0 24px 60px;
+      max-width: 680px;
+      margin: 0 auto 80px;
+      padding: 0 24px;
     }
 
     .install-card {
@@ -97,13 +138,15 @@
     .tab {
       padding: 10px 20px;
       font-size: 0.82rem;
-      color: #666;
+      color: #555;
       cursor: pointer;
       border-bottom: 2px solid transparent;
+      user-select: none;
     }
     .tab.active { color: #7dd3fc; border-bottom-color: #7dd3fc; }
 
-    .install-body { padding: 20px 24px; }
+    .tab-panel { display: none; padding: 20px 24px; }
+    .tab-panel.active { display: block; }
 
     pre {
       font-family: "SF Mono", "Fira Code", monospace;
@@ -118,7 +161,7 @@
     .val { color: #86efac; }
     .cmd { color: #fbbf24; }
 
-    /* Features */
+    /* Section */
     .section {
       max-width: 860px;
       margin: 0 auto;
@@ -159,29 +202,39 @@
       padding: 20px;
     }
 
-    .card-icon {
-      font-size: 1.4rem;
-      margin-bottom: 10px;
+    .card-icon { font-size: 1.4rem; margin-bottom: 10px; }
+    .card h3 { font-size: 0.95rem; font-weight: 600; color: #fff; margin-bottom: 6px; }
+    .card p { font-size: 0.83rem; color: #777; }
+
+    /* Pipeline */
+    .pipeline {
+      display: flex;
+      align-items: center;
+      overflow-x: auto;
+      padding: 24px 0;
+      gap: 4px;
     }
 
-    .card h3 {
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: #fff;
-      margin-bottom: 6px;
+    .pipe-step {
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 12px 14px;
+      text-align: center;
+      min-width: 100px;
+      flex-shrink: 0;
     }
 
-    .card p {
-      font-size: 0.83rem;
-      color: #777;
-    }
+    .pipe-step .icon { font-size: 1.2rem; margin-bottom: 4px; }
+    .pipe-step .label { font-size: 0.7rem; color: #666; }
+    .pipe-step .name { font-size: 0.8rem; font-weight: 600; color: #fff; }
+    .pipe-step.success { border-color: #166534; }
+    .pipe-step.deploy { border-color: #1e40af; }
+
+    .pipe-arrow { color: #333; font-size: 1.1rem; padding: 0 2px; flex-shrink: 0; }
 
     /* Rules */
-    .rules-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
+    .rules-list { display: flex; flex-direction: column; gap: 12px; }
 
     .rule {
       background: #111;
@@ -191,51 +244,23 @@
       padding: 14px 18px;
     }
 
-    .rule h4 {
-      font-size: 0.88rem;
-      font-weight: 600;
-      color: #fff;
-      margin-bottom: 4px;
-    }
+    .rule h4 { font-size: 0.88rem; font-weight: 600; color: #fff; margin-bottom: 4px; }
+    .rule p { font-size: 0.82rem; color: #777; }
 
-    .rule p {
-      font-size: 0.82rem;
-      color: #777;
-    }
+    /* Audit table */
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 14px; font-size: 0.83rem; border-bottom: 1px solid #1a1a1a; }
+    th { color: #666; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { color: #a0a0a0; }
+    td:first-child { color: #fff; font-weight: 500; }
+    tr:last-child td { border-bottom: none; }
 
-    /* Pipeline diagram */
-    .pipeline {
-      display: flex;
-      align-items: center;
-      gap: 0;
-      overflow-x: auto;
-      padding: 24px 0;
-      flex-wrap: nowrap;
-    }
-
-    .pipe-step {
+    .table-wrap {
       background: #111;
       border: 1px solid #222;
-      border-radius: 8px;
-      padding: 12px 16px;
-      text-align: center;
-      min-width: 110px;
-      flex-shrink: 0;
+      border-radius: 10px;
+      overflow: hidden;
     }
-
-    .pipe-step .icon { font-size: 1.2rem; margin-bottom: 4px; }
-    .pipe-step .label { font-size: 0.75rem; color: #a0a0a0; }
-    .pipe-step .name { font-size: 0.82rem; font-weight: 600; color: #fff; }
-
-    .pipe-arrow {
-      color: #333;
-      font-size: 1.2rem;
-      padding: 0 6px;
-      flex-shrink: 0;
-    }
-
-    .pipe-step.success { border-color: #166534; }
-    .pipe-step.deploy { border-color: #1e40af; }
 
     /* Footer */
     footer {
@@ -245,23 +270,34 @@
       color: #444;
       font-size: 0.82rem;
     }
-
     footer a { color: #555; }
+    footer a:hover { color: #888; text-decoration: none; }
   </style>
 </head>
 <body>
+
+  <!-- Nav -->
+  <nav>
+    <span class="nav-brand">nextjs-cicd</span>
+    <ul class="nav-links">
+      <li><a href="#install">Install</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#rules">Rules</a></li>
+      <li><a href="https://github.com/liveedevteam/nextjs-cicd-skill">GitHub</a></li>
+    </ul>
+  </nav>
 
   <!-- Hero -->
   <div class="hero">
     <div class="badge">Claude Code Skill</div>
     <h1>Production CI/CD for<br/><span>Next.js + Vercel</span></h1>
     <p>
-      A Claude Code skill that sets up and audits a battle-tested GitHub Actions
-      pipeline — with the hard lessons already baked in.
+      Sets up and audits a battle-tested GitHub Actions pipeline —
+      with the hard lessons already baked in.
     </p>
     <div class="cta-group">
-      <a class="btn btn-primary" href="https://github.com/liveedevteam/nextjs-cicd-skill">View on GitHub</a>
-      <a class="btn btn-secondary" href="#install">Install</a>
+      <a class="btn btn-primary" href="#install">Install now</a>
+      <a class="btn btn-secondary" href="https://github.com/liveedevteam/nextjs-cicd-skill">View on GitHub</a>
     </div>
   </div>
 
@@ -269,12 +305,21 @@
   <div class="install" id="install">
     <div class="install-card">
       <div class="install-tabs">
-        <div class="tab active">Step 1 — Add marketplace</div>
-        <div class="tab" style="color:#444">Step 2 — Install</div>
-        <div class="tab" style="color:#444">Step 3 — Use</div>
+        <div class="tab active" onclick="switchTab(0)">npx</div>
+        <div class="tab" onclick="switchTab(1)">Plugin</div>
+        <div class="tab" onclick="switchTab(2)">Use</div>
       </div>
-      <div class="install-body">
-        <pre><span class="comment">// ~/.claude/settings.json</span>
+
+      <div class="tab-panel active" id="panel-0">
+        <pre><span class="comment"># Install the skill with one command</span>
+<span class="cmd">npx nextjs-cicd-skill</span>
+
+<span class="comment"># Copies SKILL.md to ~/.claude/skills/nextjs-cicd/</span>
+<span class="comment"># Safe to re-run — skips if already installed</span></pre>
+      </div>
+
+      <div class="tab-panel" id="panel-1">
+        <pre><span class="comment">// 1. Add to ~/.claude/settings.json</span>
 {
   <span class="key">"extraKnownMarketplaces"</span>: {
     <span class="key">"nextjs-cicd"</span>: {
@@ -286,19 +331,28 @@
   }
 }
 
-<span class="comment"># Then install:</span>
-<span class="cmd">/plugin install nextjs-cicd@nextjs-cicd</span>
+<span class="comment"># 2. Install via Claude Code</span>
+<span class="cmd">/plugin install nextjs-cicd@nextjs-cicd</span></pre>
+      </div>
 
-<span class="comment"># Use in any Next.js project:</span>
-<span class="cmd">/nextjs-cicd</span></pre>
+      <div class="tab-panel" id="panel-2">
+        <pre><span class="comment"># In any Next.js project conversation, type:</span>
+<span class="cmd">/nextjs-cicd</span>
+
+<span class="comment"># Or just describe what you need — Claude activates</span>
+<span class="comment"># the skill automatically for CI/CD questions:</span>
+<span class="val">"Set up CI/CD for my Next.js project"</span>
+<span class="val">"My deploy ran before CI finished"</span>
+<span class="val">"Add Playwright E2E tests"</span>
+<span class="val">"Knip is reporting false positives"</span></pre>
       </div>
     </div>
   </div>
 
   <!-- Pipeline -->
-  <div class="section">
+  <div class="section" id="features">
     <div class="section-label">Pipeline</div>
-    <h2>Two workflows, six gates</h2>
+    <h2>Six gates. Two workflows.</h2>
     <p>CI runs first. Deploy fires only after every gate passes.</p>
 
     <div class="pipeline">
@@ -356,7 +410,7 @@
       <div class="card">
         <div class="card-icon">⚙️</div>
         <h3>GitHub Actions workflows</h3>
-        <p>CI gate, tag-based deploy, reusable Vercel workflow, composite Node setup action.</p>
+        <p>CI gate, tag-based deploy (<code>dev/uat/prd</code>), reusable Vercel workflow, composite Node setup action.</p>
       </div>
       <div class="card">
         <div class="card-icon">🧪</div>
@@ -366,12 +420,12 @@
       <div class="card">
         <div class="card-icon">🎭</div>
         <h3>Playwright E2E</h3>
-        <p>Chromium only, 1 retry on CI, auto dev-server locally, artifact upload on failure.</p>
+        <p>Chromium only, 1 retry on CI, auto dev-server locally, trace + screenshot artifacts on failure.</p>
       </div>
       <div class="card">
         <div class="card-icon">✂️</div>
         <h3>Knip dead-code scan</h3>
-        <p>Generic Next.js baseline with both <code>src/app/</code> and <code>app/</code> path variants.</p>
+        <p>Generic Next.js baseline with both <code>src/app/</code> and <code>app/</code> path variants and false-positive fix guide.</p>
       </div>
       <div class="card">
         <div class="card-icon">🔐</div>
@@ -381,16 +435,44 @@
       <div class="card">
         <div class="card-icon">🩺</div>
         <h3>Audit mode</h3>
-        <p>Symptom → fix table for 8 common pipeline failures including deploy timing and knip false positives.</p>
+        <p>Symptom → fix table for 8 common pipeline failures. No more guessing why the deploy ran twice.</p>
       </div>
     </div>
   </div>
 
-  <!-- Rules -->
+  <!-- Audit table -->
   <div class="section">
+    <div class="section-label">Audit mode</div>
+    <h2>Diagnose existing pipelines</h2>
+    <p>Tell Claude what's wrong — the skill maps symptoms to root causes.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Symptom</th>
+            <th>Root cause identified</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Deploy ran before CI finished</td><td>Wrong trigger — <code>push</code> instead of <code>workflow_run</code></td></tr>
+          <tr><td>Deploy ran twice</td><td>Unconditional <code>cancel-in-progress: true</code></td></tr>
+          <tr><td>Knip false positives</td><td>Missing entry points in <code>knip.config.ts</code></td></tr>
+          <tr><td>Semgrep blocking merges</td><td><code>continue-on-error</code> missing before baseline triage</td></tr>
+          <tr><td>Build fails on CI only</td><td>Missing build-time env var in <code>lint-and-build</code> job</td></tr>
+          <tr><td>E2E runs on every push</td><td>Missing <code>if: github.event_name == 'pull_request'</code></td></tr>
+          <tr><td>Deploy never triggers</td><td><code>workflows: [CI]</code> name doesn't match <code>ci.yml</code> exactly</td></tr>
+          <tr><td>Shell injection warning</td><td><code>${{ }}</code> expression in <code>run:</code> step instead of <code>env:</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Rules -->
+  <div class="section" id="rules">
     <div class="section-label">Hard-won lessons</div>
     <h2>Rules baked in</h2>
-    <p>Things that would take hours to debug without prior experience.</p>
+    <p>Things that take hours to debug without prior experience.</p>
 
     <div class="rules-list">
       <div class="rule">
@@ -399,7 +481,7 @@
       </div>
       <div class="rule">
         <h4>npm ci --include=optional</h4>
-        <p>Plain <code>npm ci</code> drops optional deps on Linux runners. <code>--include=optional</code> preserves lockfile determinism and fixes cross-platform native bindings.</p>
+        <p>Plain <code>npm ci</code> drops optional deps on Linux runners. <code>--include=optional</code> preserves lockfile determinism and fixes cross-platform native binding failures.</p>
       </div>
       <div class="rule">
         <h4>Deploy via workflow_run, never on push</h4>
@@ -417,6 +499,10 @@
         <h4>workflow_run name must match exactly</h4>
         <p>The <code>workflows: [CI]</code> string must match the <code>name:</code> field in <code>ci.yml</code> exactly — a mismatch silently never triggers the deploy.</p>
       </div>
+      <div class="rule">
+        <h4>vercel pull writes to a non-obvious path</h4>
+        <p><code>vercel pull --environment=production</code> writes to <code>.vercel/.env.production.local</code>, not <code>.env.local</code>. Both must be loaded in <code>validate-env.ts</code>.</p>
+      </div>
     </div>
   </div>
 
@@ -424,11 +510,19 @@
   <footer>
     <p>
       <a href="https://github.com/liveedevteam/nextjs-cicd-skill">GitHub</a> &nbsp;·&nbsp;
+      <a href="https://www.npmjs.com/package/nextjs-cicd-skill">npm</a> &nbsp;·&nbsp;
       <a href="privacy.html">Privacy Policy</a> &nbsp;·&nbsp;
       Apache 2.0 &nbsp;·&nbsp;
       by <a href="https://github.com/liveedevteam">liveedevteam</a>
     </p>
   </footer>
+
+  <script>
+    function switchTab(index) {
+      document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === index))
+      document.querySelectorAll('.tab-panel').forEach((p, i) => p.classList.toggle('active', i === index))
+    }
+  </script>
 
 </body>
 </html>
