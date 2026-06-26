@@ -1,16 +1,16 @@
 ---
 name: nextjs-cicd
-description: "Set up or audit a production-grade CI/CD pipeline for a Next.js + Vercel project. Use when the user asks to add CI, GitHub Actions, deploy workflows, Playwright E2E tests, Vitest unit tests, knip dead-code scan, validate-env, or any part of the CI/CD pipeline. Also use when auditing or fixing existing workflow files."
+description: "Set up, audit, or fix a production-grade CI/CD pipeline for a Next.js + Vercel project. Use when the user asks to: add CI/CD, set up GitHub Actions, configure deploy workflows, add Playwright E2E tests, add Vitest unit tests, set up knip dead-code scanning, add env var validation, fix a failing CI job, debug why a deploy ran before CI finished, fix semgrep blocking merges, fix knip false positives, understand why tests aren't running, or asks 'why is my deploy running on every push', 'set up testing for my Next.js app', 'my deploy ran twice', 'CI is failing', or any question about GitHub Actions workflows in a Next.js project."
 ---
 
 # Next.js CI/CD Pipeline Skill
 
-## What this skill covers
+## Modes
 
-A complete CI/CD pipeline for Next.js projects deployed on Vercel, using GitHub Actions. The pipeline has two workflows:
+This skill covers two scenarios. Identify which applies before acting:
 
-1. **CI** (`ci.yml`) — runs on every push/PR, gates all merges
-2. **Deploy** (`deploy.yml`) — fires only after CI passes, never directly on push
+- **Install mode** — project has no CI/CD yet → copy files, install deps, print next steps
+- **Audit mode** — project already has workflows → diagnose and fix problems
 
 ---
 
@@ -67,6 +67,27 @@ config({ path: ".vercel/.env.production.local" })
 config({ path: ".env.local" })
 ```
 
+### 6. `vercel` CLI version pin
+
+Templates use `npx vercel@54`. This is pinned for reproducibility — unpinned `npx vercel` can pull a breaking major version mid-flight. When upgrading, check the [Vercel CLI changelog](https://github.com/vercel/vercel/releases) and pin to the new major explicitly.
+
+---
+
+## Audit checklist (use when pipeline already exists)
+
+When the user reports a problem, check these before suggesting changes:
+
+| Symptom | What to check |
+|---|---|
+| Deploy ran before CI finished | `deploy.yml` uses `workflow_run`, not `push`/`tag`? All jobs check `conclusion == 'success'`? |
+| Deploy ran twice | Concurrency group includes branch name? `cancel-in-progress` is conditional (not `true`)? |
+| `npm audit` blocking merges | Run `npm audit --audit-level=high` locally — is it a real vuln or a false positive? Use `npm audit fix` or add an `overrides` entry in `package.json` |
+| `knip` reporting false positives | Check `entry` patterns cover all framework entry points; add false-positive exports to `ignore` or `ignoreDependencies` |
+| `semgrep` blocking merges | `continue-on-error: true` should be set until baseline triage is complete — flip it back |
+| E2E running on push to main | `e2e` job must have `if: github.event_name == 'pull_request'` |
+| Shell injection warning | Move `${{ }}` expressions out of `run:` into `env:` blocks |
+| `${{ }}` in `run:` not expanding | Expression must be in `env:` — see rule 1 |
+
 ---
 
 ## CI gate jobs (all run in parallel)
@@ -80,7 +101,7 @@ config({ path: ".env.local" })
 | `semgrep` | semgrep-action with `p/typescript p/react p/nextjs p/secrets p/owasp-top-ten` | No (`continue-on-error: true`) until baseline triage |
 | `e2e` | `npm run test:e2e` | Yes — PRs only (`if: github.event_name == 'pull_request'`) |
 
-> `semgrep` starts as non-blocking. Flip to blocking after the team triages the first run's findings.
+> `semgrep` starts as non-blocking. Flip `continue-on-error` to `false` after the team triages the first run's findings.
 
 ---
 
@@ -165,9 +186,11 @@ jobs:
       - run: npm run type-check
       - run: npm run build
         env:
-          # Add dummy values for any env vars required at build time
-          MONGODB_URI: mongodb://localhost:27017/dummy
-          AUTH_SECRET: dummy-secret-for-build-only
+          # Add dummy values for env vars your project requires at build time.
+          # Ask the user which vars Next.js needs at build (not runtime) and add them here.
+          # Example:
+          # DATABASE_URL: dummy://localhost/dummy
+          # AUTH_SECRET: dummy-secret-for-build-only
 
   unit-tests:
     name: Unit Tests
@@ -444,44 +467,72 @@ export default defineConfig({
 
 ### `knip.config.ts`
 
+Start with this generic Next.js baseline, then tailor `entry` to match the project's actual structure.
+
 ```typescript
 import type { KnipConfig } from "knip"
 
 const config: KnipConfig = {
   entry: [
-    "src/app/**/{page,layout,route,loading,error,not-found}.tsx",
+    // Standard Next.js App Router entry points — adjust if the project uses /pages or a different src layout
+    "src/app/**/{page,layout,route,loading,error,not-found}.{ts,tsx}",
     "src/app/api/**/*.ts",
+    "app/**/{page,layout,route,loading,error,not-found}.{ts,tsx}",  // no src/ prefix variant
     "next.config.{ts,js,mjs}",
     "scripts/*.ts",
   ],
-  project: ["src/**/*.{ts,tsx}", "scripts/**/*.ts"],
-  ignore: ["src/components/ui/**"],
+  project: [
+    "src/**/*.{ts,tsx}",
+    "app/**/*.{ts,tsx}",
+    "scripts/**/*.ts",
+  ],
+  ignore: [
+    // Add generated files, shadcn components, or other intentionally-unused exports here
+    "src/components/ui/**",
+  ],
   ignoreDependencies: [
+    // Add packages that are used implicitly (e.g. peer deps, CLI tools, test utils)
     "@playwright/test",
-    "@testing-library/react",
-    "@testing-library/user-event",
   ],
 }
 
 export default config
 ```
 
+**Common knip false positives and fixes:**
+
+| False positive | Fix |
+|---|---|
+| Auth config file (e.g. `auth.ts`) reported as unused | Add `"src/lib/auth.ts"` to `entry` |
+| shadcn/ui components flagged | Add `"src/components/ui/**"` to `ignore` |
+| Test utilities flagged | Add to `ignoreDependencies` |
+| API route handlers not detected | Ensure `src/app/api/**/*.ts` pattern covers the project's actual path |
+
 ---
 
 ## `scripts/validate-env.ts`
+
+**Before writing this file**, scan the project for env var usage:
+- Read `next.config.ts` / `next.config.js` for `env:` and `publicRuntimeConfig`
+- Grep for `process.env.` across `src/` to find all referenced vars
+- Check `.env.example` if it exists
+
+Then fill in the Zod schema with the vars you find.
 
 ```typescript
 import { config } from "dotenv"
 import { z } from "zod"
 
-// vercel pull writes to this path; fall back to .env.local for local dev
+// vercel pull --environment=production writes here; fall back to .env.local for local dev
 config({ path: ".vercel/.env.production.local" })
 config({ path: ".env.local" })
 
 const envSchema = z.object({
-  // Fill in the project's required env vars:
-  // MONGODB_URI: z.string().min(1),
+  // Fill in the project's required runtime env vars discovered from the codebase.
+  // Examples:
+  // DATABASE_URL: z.string().min(1),
   // AUTH_SECRET: z.string().min(1),
+  // NEXT_PUBLIC_API_URL: z.string().url(),
 })
 
 const result = envSchema.safeParse(process.env)
@@ -491,6 +542,7 @@ if (!result.success) {
   for (const [field, issues] of Object.entries(result.error.flatten().fieldErrors)) {
     console.error(`  ${field}: ${issues?.join(", ")}`)
   }
+  console.error("\nEnsure all required variables are set in Vercel or .env.local.")
   process.exit(1)
 }
 
@@ -515,11 +567,42 @@ console.log("✅ All required environment variables are present.")
 }
 ```
 
+Merge additively — never remove existing scripts.
+
 ## Dev dependencies to install
 
 ```bash
 npm install -D knip vitest @vitest/coverage-v8 jsdom @testing-library/jest-dom @playwright/test dotenv
 ```
+
+---
+
+## Troubleshooting common gate failures
+
+### `npm audit` fails
+```bash
+npm audit --audit-level=high   # reproduce locally
+npm audit fix                  # auto-fix if possible
+```
+If it's a transitive dep with no fix yet, add a `overrides` entry in `package.json` to force a safe version, or use `npm audit --ignore` for known false positives.
+
+### `knip` fails immediately
+Most likely the `entry` patterns don't match the project's file structure. Check:
+1. Does the project use `src/app/` or `app/` (no src prefix)?
+2. Are there non-standard entry points (auth config, middleware, instrumentation)?
+Add them to `entry` in `knip.config.ts`.
+
+### `semgrep` blocking merges
+Set `continue-on-error: true` on the semgrep job until the team does a baseline triage run. Only remove it after all existing findings are either fixed or suppressed with `# nosemgrep`.
+
+### E2E tests fail on CI but pass locally
+Check:
+1. `PLAYWRIGHT_BASE_URL` — is `VERCEL_ALIAS_DEV` set in GitHub Variables?
+2. `E2E_ADMIN_EMAIL` / `E2E_ADMIN_PASSWORD` — are they set in GitHub Secrets?
+3. Is the dev deployment URL correct and publicly reachable?
+
+### Build fails on CI but works locally
+Almost always a missing build-time env var. Add a dummy value in the `lint-and-build` job's `env:` block. Check `next.config.ts` for any vars accessed at build time (outside of `getServerSideProps` / server components).
 
 ---
 
@@ -539,7 +622,7 @@ npm install -D knip vitest @vitest/coverage-v8 jsdom @testing-library/jest-dom @
 
 | Variable | Purpose |
 |---|---|
-| `VERCEL_ALIAS_DEV` | Base URL for E2E on PRs |
+| `VERCEL_ALIAS_DEV` | Base URL for E2E tests on PRs |
 
 ---
 
@@ -566,10 +649,12 @@ gh run list --repo <owner>/<repo> --limit 5
 ## When installing into a project
 
 1. **Detect** — confirm `package.json` exists with `next` as a dependency; read `.nvmrc` for Node version
-2. **Check existing files** — never overwrite; print `⚠ skipped (already exists): <path>` for each conflict
-3. **Copy workflow files** into `.github/workflows/` and `.github/actions/setup-node/`
-4. **Copy test configs** — `vitest.config.ts`, `playwright.config.ts`, `knip.config.ts`, `src/test/setup.ts`
-5. **Copy scripts** — `scripts/validate-env.ts` (user must fill in their env vars)
-6. **Merge `package.json` scripts** — additive only, never remove existing scripts
-7. **Install dev dependencies** — only those not already present
-8. **Print next steps** — GitHub Secrets list, `VERCEL_ALIAS_DEV` variable, commit and push instructions
+2. **Discover build-time env vars** — scan `next.config.ts` and grep `process.env.` across `src/` before writing `validate-env.ts`
+3. **Check existing files** — never overwrite; print `⚠ skipped (already exists): <path>` for each conflict
+4. **Copy workflow files** into `.github/workflows/` and `.github/actions/setup-node/`
+5. **Copy test configs** — `vitest.config.ts`, `playwright.config.ts`, `knip.config.ts`, `src/test/setup.ts`
+6. **Tailor `knip.config.ts`** — adjust `entry` paths to match the project's actual file structure
+7. **Copy scripts** — `scripts/validate-env.ts` with env vars discovered in step 2
+8. **Merge `package.json` scripts** — additive only, never remove existing scripts
+9. **Install dev dependencies** — only those not already present
+10. **Print next steps** — GitHub Secrets list, `VERCEL_ALIAS_DEV` variable, commit and push instructions
