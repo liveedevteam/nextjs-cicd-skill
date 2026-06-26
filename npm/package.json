@@ -1,0 +1,22 @@
+{
+  "name": "nextjs-cicd-skill",
+  "version": "1.0.0",
+  "description": "Install the nextjs-cicd Claude Code skill via npx",
+  "bin": {
+    "nextjs-cicd-skill": "./src/cli.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "keywords": ["claude-code", "skill", "nextjs", "cicd", "github-actions", "vercel"],
+  "author": "liveedevteam",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/liveedevteam/nextjs-cicd-skill"
+  },
+  "homepage": "https://liveedevteam.github.io/nextjs-cicd-skill/",
+  "engines": {
+    "node": ">=18"
+  }
+}
