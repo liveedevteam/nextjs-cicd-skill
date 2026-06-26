@@ -1,6 +1,6 @@
 ---
 name: nextjs-cicd
-description: "Set up, audit, or fix a production-grade CI/CD pipeline for a Next.js + Vercel project. Use when the user asks to: add CI/CD, set up GitHub Actions, configure deploy workflows, add Playwright E2E tests, add Vitest unit tests, set up knip dead-code scanning, add env var validation, fix a failing CI job, debug why a deploy ran before CI finished, fix semgrep blocking merges, fix knip false positives, understand why tests aren't running, or asks 'why is my deploy running on every push', 'set up testing for my Next.js app', 'my deploy ran twice', 'CI is failing', or any question about GitHub Actions workflows in a Next.js project."
+description: "Set up, audit, or fix a production-grade CI/CD pipeline for a Next.js + Vercel project. Use when the user asks to add CI/CD, set up GitHub Actions, configure Vercel deploy workflows, add Playwright or Vitest, fix a failing CI job, or debug deploy timing issues (deploy ran before CI, deploy ran twice, semgrep blocking merges, knip false positives)."
 ---
 
 # Next.js CI/CD Pipeline Skill
@@ -28,9 +28,15 @@ This skill covers two scenarios. Identify which applies before acting:
   run: vercel deploy --token="$VERCEL_TOKEN"
 ```
 
-### 2. Use `npm install`, not `npm ci` in CI
+### 2. Use `npm ci --include=optional`, not plain `npm ci` in CI
 
-`npm ci` breaks on cross-platform optional dependencies (e.g. native bindings differ between macOS arm64 and Linux x64). Use `npm install` in the composite setup-node action.
+Plain `npm ci` skips optional dependencies, which breaks cross-platform native bindings (e.g. a package compiled for macOS arm64 won't exist in the Linux x64 runner's lockfile). The `--include=optional` flag preserves lockfile determinism while ensuring optional deps are installed:
+
+```bash
+npm ci --include=optional
+```
+
+Do not fall back to `npm install` — it sacrifices lockfile determinism. Always use `npm ci --include=optional` in the composite setup-node action.
 
 ### 3. Deploy triggers on CI completion (`workflow_run`), never on push
 
@@ -67,7 +73,45 @@ config({ path: ".vercel/.env.production.local" })
 config({ path: ".env.local" })
 ```
 
-### 6. `vercel` CLI version pin
+### 6. `workflow_run` depends on the CI workflow's `name:` matching exactly
+
+`deploy.yml` listens for:
+
+```yaml
+on:
+  workflow_run:
+    workflows: [CI]
+```
+
+This matches the `name:` field at the top of `ci.yml`. If the CI workflow is named anything other than `CI` (e.g. `"Continuous Integration"`, `"ci"`), the deploy workflow **silently never triggers** — no error, no warning. Always verify both files use the same string.
+
+### 7. Use least-privilege `permissions:` on all workflows
+
+Always declare the minimum `GITHUB_TOKEN` permissions needed. Default permissions are too broad. For CI:
+
+```yaml
+permissions:
+  contents: read
+
+jobs:
+  ...
+```
+
+For the deploy workflow (needs to post PR comments):
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: read
+
+jobs:
+  ...
+```
+
+Never omit the `permissions:` block — without it the token inherits repository-wide write access.
+
+### 8. `vercel` CLI version pin
 
 Templates use `npx vercel@54`. This is pinned for reproducibility — unpinned `npx vercel` can pull a breaking major version mid-flight. When upgrading, check the [Vercel CLI changelog](https://github.com/vercel/vercel/releases) and pin to the new major explicitly.
 
@@ -152,7 +196,7 @@ runs:
     - name: Install dependencies
       if: inputs.install-dependencies == 'true'
       shell: bash
-      run: npm install
+      run: npm ci --include=optional
 ```
 
 ### CI workflow: `.github/workflows/ci.yml`
